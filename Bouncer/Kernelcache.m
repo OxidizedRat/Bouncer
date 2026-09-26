@@ -7,42 +7,60 @@
 
 #import <Foundation/Foundation.h>
 #import "Kernelcache.h"
+#import <mach-o/loader.h>
 
 @interface Kernelcache()
-@property (readwrite) NSData *rawBytes;
-
+@property (readwrite) NSData *kData;
+@property (readwrite) struct mach_header_64 header;
 @end
 
 @implementation Kernelcache
 
-- (instancetype) initWithPath:(NSString *)path error:(NSError *)error{
-    self = [super init];
-    
-    NSData * data = [NSData dataWithContentsOfURL:[NSURL URLWithString:path] options:NSDataReadingMappedAlways error:&error];
-    if (!data){
-        error = [NSError errorWithDomain:@"KernelcacheErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Failed to map file"}];
+- (instancetype) initWithPath:(NSString *)path error:(NSError **)error{
+    if (!error){
         return nil;
     }
-    uint32_t magic = 0;
-    [data getBytes:&magic range:NSMakeRange(0, 4)];
-    switch (magic) {
-        case 0xCFFAEFFE:
-            self.rawBytes = data;
-            return self;
-            break;
-        case 0xCEFAEDFE:
-            error = [NSError errorWithDomain:@"KernelcacheErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey:@"32-bit mach-o not implemented"}];
-            return nil;
-            break;
-        case 0xBEBAFECA:
-            error = [NSError errorWithDomain:@"KernelcacheErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Universal binary not implemented"}];
-            return nil;
-            break;
-        default:
-            error = [NSError errorWithDomain:@"KernelcacheErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Invalid magic"}];
-            break;
+    self = [super init];
+    if (!self){
+        return nil;
     }
+    NSData * data = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:path] options:NSDataReadingMappedAlways error:error];
+    if (!data){
+        return nil;
+    }
+    struct mach_header_64 header;
+    if (data.length < sizeof(header)){
+        *error = [NSError errorWithDomain:@"KernelcacheErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey:@"File is too small to be valid mach-o 64"}];
+        return nil;
+    }
+    [data getBytes:&header range:NSMakeRange(0, sizeof(header))];
+    
+    if (header.magic != MH_MAGIC_64){
+        *error = [NSError errorWithDomain:@"KernelcacheErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Invalid or unsupported magic"}];
+        return nil;
+    }
+    if (header.cputype != CPU_TYPE_ARM64){
+        *error = [NSError errorWithDomain:@"KernelcacheErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Invalid cpu type"}];
+        return nil;
+    }
+    if (header.filetype != MH_FILESET){
+        *error = [NSError errorWithDomain:@"KernelcacheErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Invalid file type"}];
+        return nil;
+    }
+    
+    self.header = header;
+    self.kData = data;
+    
+    return self;
+}
+
+- (NSData *) extractSandboxKext{
+    
+    NSData * sandboxKext = [[NSData alloc]init];
+    
+    
     return nil;
+    
 }
 
 @end

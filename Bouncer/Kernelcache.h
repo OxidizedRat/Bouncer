@@ -7,12 +7,13 @@
 
 #ifndef Kernelcache_h
 #define Kernelcache_h
-
+#import <mach-o/loader.h>
+#import <Foundation/Foundation.h>
 @interface Kernelcache : NSObject
-@property (readonly, nonatomic) NSData * rawBytes;
-
-- (instancetype) initWithPath:(NSString *)path error: (NSError *)error;
-- (NSData *) extractSecurityKext;
+@property (readonly, nonatomic) NSData * kData;
+@property (readonly, nonatomic) struct mach_header_64 header;
+- (instancetype) initWithPath:(NSString *)path error: (NSError **)error;
+- (NSData *) extractSandboxKext;
 
 @end
 

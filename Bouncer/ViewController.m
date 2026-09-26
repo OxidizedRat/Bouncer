@@ -56,7 +56,7 @@
                     }
                 });
             } else {
-                Kernelcache *kernelcache = [[Kernelcache alloc] initWithPath:url.path error:error];
+                Kernelcache *kernelcache = [[Kernelcache alloc] initWithPath:url.path error:&error];
                 if (!kernelcache){
                     [self showError:error];
                     return;

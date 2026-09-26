@@ -9,7 +9,7 @@
 #define im4p_h
 
 @interface Im4p : NSObject
-
-+ (instancetype) initWithPath:(NSString *)path;
+@property (readonly, nonatomic, copy) NSData * kernelcache;
+- (instancetype) initWithData:(NSData *) kernelCache;
 @end
 #endif /* im4p_h */

@@ -8,6 +8,7 @@
 #import "ViewController.h"
 #import "im4p.h"
 #import "ipsw.h"
+#import "Kernelcache.h"
 @implementation ViewController
 
 - (void)viewDidLoad {
@@ -38,18 +39,44 @@
             return;
         }
         NSURL *url = panel.URL;
-        NSLog(@"Picked file %@", url.path);
-        NSError *error = nil;
-        Ipsw *ipsw = [Ipsw initWithPath:url.path error:&error];
-        if(ipsw != nil){
-            NSLog(@"success");
-        }
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            NSError *error = nil;
+            NSData *im4pData = nil;
+            BOOL isIPSW = [url.pathExtension caseInsensitiveCompare:@"ipsw"] == NSOrderedSame;
+            if(isIPSW){
+                
+                Ipsw *ipsw = [[Ipsw alloc] initWithPath:url.path error:&error];
+                if (ipsw){
+                    im4pData = ipsw.kernelcache;
+                }
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (!im4pData) {
+                        [self showError:error];
+                        return;
+                    }
+                });
+            } else {
+                Kernelcache *kernelcache = [[Kernelcache alloc] initWithPath:url.path error:error];
+                if (!kernelcache){
+                    [self showError:error];
+                    return;
+                }
+            }
+        });
+        
     }];
-    
-    
-    
 }
-
+-(void)showError:(NSError*) error{
+    if (!error) return;
+    NSAlert *alert = [NSAlert alertWithError:error];
+    alert.alertStyle = NSAlertStyleWarning;
+    NSWindow *window = self.view.window;
+    if(window){
+        [alert beginSheetModalForWindow:window completionHandler:nil];
+    }else {
+        [alert runModal];
+    }
+}
 @end
 
 

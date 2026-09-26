@@ -9,9 +9,9 @@
 #define ipsw_h
 
 @interface Ipsw : NSObject
-@property  NSData *kernelcache;
+@property (nonatomic, readonly, copy)  NSData *kernelcache;
 
-+ (instancetype) initWithPath:(NSString *)path error:(NSError **)error;
-- (uint8_t *) getKernelCache;
+- (instancetype) initWithPath:(NSString *)path error:(NSError **)error;
+
 @end
 #endif /* ipsw_h */

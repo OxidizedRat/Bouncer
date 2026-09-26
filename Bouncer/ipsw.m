@@ -70,12 +70,14 @@ struct __attribute__((packed)) LocalHeaderRecord{
     uint16_t filenameLength;
     uint16_t extraFieldlength;
 };
+@interface Ipsw ()
+@property (nonatomic, readwrite, copy) NSData * kernelcache;
+@end
 @implementation Ipsw
-
-+(instancetype) initWithPath:(NSString *)path
+- (instancetype) initWithPath:(NSString *)path
                        error:(NSError **) error
 {
-    Ipsw *ipsw = [[Ipsw alloc]init];
+    self = [super init];
     NSData * contents = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedAlways error:error];
     if(contents == nil){
         return nil;
@@ -167,7 +169,7 @@ struct __attribute__((packed)) LocalHeaderRecord{
     }
     if(!kernelcacheFound){
         *error = [NSError errorWithDomain:@"IPSWErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Kernelcache was not found in ipsw"}];
-        return ipsw;
+        return nil;
     }
     //if kernel cache is found check which CD header fields have overflowed and retrieve the  values from extrafields
     uint64_t extraStart = cdEntry.fileNameLength + kernelcacheCDOffset + 46;
@@ -216,8 +218,8 @@ struct __attribute__((packed)) LocalHeaderRecord{
             *error = [NSError errorWithDomain:@"IPSWErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey: @"uncompressed CRC32 check failed"}];
             return nil;
         }
-        ipsw.kernelcache = KernelCache;
-        return ipsw;
+        self.kernelcache = KernelCache;
+        return self;
     }else if(localHeader.compressionMethod == 0){
         uint8_t *kernelcacheBytes = KernelCache.mutableBytes;
         if((dataStart + uncompressedSize) > archiveSize){
@@ -225,13 +227,18 @@ struct __attribute__((packed)) LocalHeaderRecord{
             return nil;
         }
         memcpy(kernelcacheBytes, bytes+dataStart, uncompressedSize);
-        ipsw.kernelcache = KernelCache;
-        return ipsw;
+        if(crc32(0, kernelcacheBytes, (uInt)KernelCache.length)!= cdEntry.crc32Uncompressed){
+            *error = [NSError errorWithDomain:@"IPSWErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey: @"uncompressed CRC32 check failed"}];
+            return nil;
+        }
+        self.kernelcache = KernelCache;
+        return self;
     }else {
         *error = [NSError errorWithDomain:@"IPSWErrorDomain" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Unsupported compression method"}];
+        return nil;
     }
     
-    return nil;
+    return self;
 }
 
 @end

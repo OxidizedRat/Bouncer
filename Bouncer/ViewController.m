@@ -6,8 +6,6 @@
 //
 
 #import "ViewController.h"
-#import "im4p.h"
-#import "ipsw.h"
 #import "Kernelcache.h"
 @implementation ViewController
 
@@ -41,29 +39,14 @@
         NSURL *url = panel.URL;
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             NSError *error = nil;
-            NSData *im4pData = nil;
-            BOOL isIPSW = [url.pathExtension caseInsensitiveCompare:@"ipsw"] == NSOrderedSame;
-            if(isIPSW){
-                
-                Ipsw *ipsw = [[Ipsw alloc] initWithPath:url.path error:&error];
-                if (ipsw){
-                    im4pData = ipsw.kernelcache;
-                }
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (!im4pData) {
-                        [self showError:error];
-                        return;
-                    }
-                });
-            } else {
-                Kernelcache *kernelcache = [[Kernelcache alloc] initWithPath:url.path error:&error];
+            Kernelcache *kernelcache = [[Kernelcache alloc] initWithPath:url.path error:&error];
+            dispatch_async(dispatch_get_main_queue(), ^{
                 if (!kernelcache){
                     [self showError:error];
                     return;
                 }
-            }
+            });
         });
-        
     }];
 }
 -(void)showError:(NSError*) error{

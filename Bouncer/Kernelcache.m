@@ -10,7 +10,7 @@
 #import <mach-o/loader.h>
 
 @interface Kernelcache()
-@property (readwrite) NSData *kData;
+@property (readwrite) NSData *data;
 @property (readwrite) struct mach_header_64 header;
 @end
 
@@ -49,7 +49,7 @@
     }
     
     self.header = header;
-    self.kData = data;
+    self.data = data;
     
     return self;
 }

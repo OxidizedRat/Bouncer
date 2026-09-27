@@ -10,11 +10,12 @@
 #import <mach-o/loader.h>
 #import <Foundation/Foundation.h>
 @interface Kernelcache : NSObject
-@property (readonly, nonatomic) NSData * kData;
+@property (readonly, nonatomic) NSData * data;
 @property (readonly, nonatomic) struct mach_header_64 header;
+@property (readonly, nonatomic) NSData * blobs;
 - (instancetype) initWithPath:(NSString *)path error: (NSError **)error;
 - (NSData *) extractSandboxKext;
-
+- (NSData *) extractSandboxBlobs;
 @end
 
 #endif /* Kernelcache_h */

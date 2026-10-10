@@ -8,7 +8,7 @@
 #import <Foundation/Foundation.h>
 #import "Kernelcache.h"
 #import <mach-o/loader.h>
-
+#import "SandboxBlob.h"
 typedef enum {InsOther, InsADRP, InsADD, InsMOVZ, InsMOVK, InsBL, InsSTP} InsKind;
 
 typedef struct {
@@ -167,6 +167,7 @@ static void applyState(DecodedIns *ins, struct regState *state) {
 @property (readwrite) struct section_64 textCString;
 @property (readwrite) struct section_64 textConst;
 @property (readwrite) struct section_64 textExecText;
+
 @end
 
 @implementation Kernelcache

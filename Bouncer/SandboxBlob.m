@@ -299,7 +299,7 @@ static NSError * sandboxError(NSString *errorMessage){
 
 }
 
--(OperationVerdic) verdictForOperationAtIndex:(NSUInteger)opIndex inProfile:(SandboxProfile *) profile{
+-(OperationVerdict) verdictForOperationAtIndex:(NSUInteger)opIndex inProfile:(SandboxProfile *) profile{
     
     uint16_t startNodeIndex = [profile nodeIndexForOperationAtIndex:opIndex];
     OpNode startNode = {0};

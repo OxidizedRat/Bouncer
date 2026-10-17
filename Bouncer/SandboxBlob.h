@@ -71,7 +71,7 @@ typedef NS_ENUM(uint64_t, OperationVerdict){
 
 - (instancetype __nullable) initWithData:(NSData *) data operationNames: (NSArray<NSString *> *) operationNames error: (NSError **)error;
 - (NSIndexSet  * _Nullable ) reachableNodesForOperationAtIndex:(NSUInteger)opIndex inProfile:(SandboxProfile *) profile;
--(OperationVerdic) verdictForOperationAtIndex:(NSUInteger)opIndex inProfile:(SandboxProfile *) profile;
+-(OperationVerdict) verdictForOperationAtIndex:(NSUInteger)opIndex inProfile:(SandboxProfile *) profile;
 @end
 NS_ASSUME_NONNULL_END
 #endif /* SandboxBlob_h */

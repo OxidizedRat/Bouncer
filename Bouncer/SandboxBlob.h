@@ -34,6 +34,7 @@ typedef struct __attribute__((packed)) {
     uint16_t matchNode;
     uint16_t unmatchNode;
 }OpNode;
+
 typedef struct __attribute__((packed)){
     uint16_t nameOffset;
     uint16_t unknownField0;
@@ -41,11 +42,21 @@ typedef struct __attribute__((packed)){
     uint16_t unknownField2;
 }SandboxProfileHeader;
 
+typedef NS_ENUM(uint64_t, OperationVerdict){
+    OperationVerdictAlwaysAllow,
+    OperationVerdictAlwaysDeny,
+    OperationVerdictConditional,
+    OperationVerdictConditionalAllow,
+    OperationVerdictConditionalDeny,
+    OperationVerdictInvalid,
+};
+
 @interface SandboxProfile: NSObject
 @property (readonly, copy) NSString * name;
 @property (readonly, nonatomic, copy) NSData * opTable;
 
 - (instancetype __nullable) initWithName:(NSString *)Name opTable: (NSData *) opTable;
+-(uint16_t) nodeIndexForOperationAtIndex:(NSUInteger)index;
 @end
 
 @interface SandboxBlob : NSObject
@@ -54,9 +65,13 @@ typedef struct __attribute__((packed)){
 @property (readonly) SandboxBlobType type;
 @property (readonly, copy) NSData *nodes;
 @property (readonly) uint64_t baseStart;
-@property (readonly) NSArray<SandboxProfile *> * profiles;
+@property (readonly, copy) NSArray<SandboxProfile *> * profiles;
+@property (readonly, copy) NSArray<NSString *> * operationNames;
 
-- (instancetype __nullable) initWithData:(NSData *) data error: (NSError **)error;
+
+- (instancetype __nullable) initWithData:(NSData *) data operationNames: (NSArray<NSString *> *) operationNames error: (NSError **)error;
+- (NSIndexSet  * _Nullable ) reachableNodesForOperationAtIndex:(NSUInteger)opIndex inProfile:(SandboxProfile *) profile;
+-(OperationVerdic) verdictForOperationAtIndex:(NSUInteger)opIndex inProfile:(SandboxProfile *) profile;
 @end
 NS_ASSUME_NONNULL_END
 #endif /* SandboxBlob_h */

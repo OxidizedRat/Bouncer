@@ -9,6 +9,7 @@
 #import "Kernelcache.h"
 #import <mach-o/loader.h>
 #import "SandboxBlob.h"
+#include <os/overflow.h>
 typedef enum {InsOther, InsADRP, InsADD, InsMOVZ, InsMOVK, InsBL, InsSTP} InsKind;
 
 typedef struct {
@@ -158,16 +159,20 @@ static void applyState(DecodedIns *ins, struct regState *state) {
 @interface Kernelcache()
 @property (readwrite) NSData *data;
 @property (readwrite) struct mach_header_64 header;
+@property (readwrite, nonatomic, copy) NSData * _Nullable blobProtobox;
+@property (readwrite, nonatomic, copy) NSData * _Nullable blobProfile;
+@property (readwrite, nonatomic, copy) NSData * _Nullable blobBuiltin;
 @property (readwrite) uint64_t sandboxKextOffset;
-@property (readwrite, copy) NSData * blobBuiltin;
-@property (readwrite, copy) NSData * blobProtobox;
-@property (readwrite, copy) NSData * blobProfile;
 @property (readwrite) uint64_t builtinVMAddress;
 @property (readwrite) uint64_t autoboxVMAddress;
 @property (readwrite) struct section_64 textCString;
 @property (readwrite) struct section_64 textConst;
 @property (readwrite) struct section_64 textExecText;
-
+@property (readwrite) struct section_64 dataConstConst;
+@property (readwrite) SandboxBlob * builtin;
+@property (readwrite) SandboxBlob * protobox;
+@property (readwrite) SandboxBlob * profile;
+@property (readwrite, copy) NSArray<NSString *> * operationNames;
 @end
 
 @implementation Kernelcache
@@ -216,7 +221,13 @@ static void applyState(DecodedIns *ins, struct regState *state) {
     if(![self findBlobsWithError:error]){
         return nil;
     }
-
+    if(![self operationNamesWithError:error]){
+        return nil;
+    }
+    
+    if(![self createSandboxBlobs:error]){
+        return nil;
+    }
     return self;
 }
 //returns 0 on error as sandbox kext cannot start at offset 0
@@ -283,7 +294,7 @@ static void applyState(DecodedIns *ins, struct regState *state) {
     struct section_64 textConst = {0};
     struct section_64 textCstring = {0};
     struct section_64 textExecText = {0};
-    
+    struct section_64 dataConstConst = {0};
     //iterate load commands for __TEXT__const __TEXT_cstring and __TEXT_EXEC __text sections
     uint32_t numCommands = header.ncmds;
     uint64_t currentOffset = fileOffset + sizeof(header);
@@ -329,6 +340,11 @@ static void applyState(DecodedIns *ins, struct regState *state) {
                 textExecText = section;
                 continue;
             }
+            
+            if(strncmp(section.segname, "__DATA_CONST",16)== 0 && strncmp(section.sectname, "__const", 16)== 0){
+                 dataConstConst = section;
+                continue;
+            }
         }
         currentOffset += lc.cmdsize;
     }
@@ -342,6 +358,10 @@ static void applyState(DecodedIns *ins, struct regState *state) {
     }
     if(textExecText.size == 0){
         if(error){*error = kernelCacheError(@"__TEXT_EXEC__text section not found");}
+        return 0;
+    }
+    if(dataConstConst.size == 0){
+        if(error){*error = kernelCacheError(@"__DATA_CONST__const section not found");}
         return 0;
     }
     
@@ -396,6 +416,7 @@ static void applyState(DecodedIns *ins, struct regState *state) {
     self.textConst = textConst;
     self.textCString = textCstring;
     self.textExecText = textExecText;
+    self.dataConstConst = dataConstConst;
     return 1;
 }
 
@@ -419,7 +440,7 @@ static void applyState(DecodedIns *ins, struct regState *state) {
         DecodedIns decodedIns = decodeInstruction(ins, pc);
         if(decodedIns.kind == InsBL){
             //if x1 is known and equal to a lable VMAddr and x2 is known and inside __const, x2 is that blobs start and x3 lower 32 bits is the size
-            if(state.known[1] == YES && state.value[1] == self.builtinVMAddress && state.known[3] == YES && state.known[2] & !builtinFound){
+            if(state.known[1] == YES && state.value[1] == self.builtinVMAddress && state.known[3] == YES && state.known[2] && !builtinFound){
                 if(state.value[2] < self.textConst.addr + self.textConst.size && state.value[2] >= self.textConst.addr){
                     uint64_t builtinBlobOffset = (state.value[2] - self.textConst.addr) + self.textConst.offset;
                     uint32_t builtinSize = (uint32_t)state.value[3];
@@ -427,7 +448,7 @@ static void applyState(DecodedIns *ins, struct regState *state) {
                     self.blobBuiltin = [self.data subdataWithRange:NSMakeRange(builtinBlobOffset, builtinSize)];
                 }
             }
-            if(state.known[1] == YES && state.value[1] == self.autoboxVMAddress && state.known[3] == YES && state.known[2] && autoboxFound){
+            if(state.known[1] == YES && state.value[1] == self.autoboxVMAddress && state.known[3] == YES && state.known[2] && !autoboxFound){
                 if(state.value[2] < self.textConst.addr + self.textConst.size && state.value[2] >= self.textConst.addr){
                     uint64_t autoboxBlobOffset = (state.value[2] - self.textConst.addr) + self.textConst.offset;
                     uint32_t autoboxSize = (uint32_t)state.value[3];
@@ -464,5 +485,99 @@ static void applyState(DecodedIns *ins, struct regState *state) {
         return NO;
     }
     return YES;
+}
+-(BOOL) createSandboxBlobs:(NSError **) error{
+    SandboxBlob * builtinBlob = [[SandboxBlob alloc] initWithData:self.blobBuiltin operationNames: self.operationNames error:error];
+    if(!builtinBlob){return NO;}
+    SandboxBlob * profileBlob = [[SandboxBlob alloc] initWithData:self.blobProfile operationNames: self.operationNames  error:error];
+    if(!profileBlob){return NO;}
+    SandboxBlob * protoboxBlob = [[SandboxBlob alloc] initWithData:self.blobProtobox operationNames: self.operationNames  error:error];
+    if(!protoboxBlob){return NO;}
+    
+    self.builtin = builtinBlob;
+    self.protobox = protoboxBlob;
+    self.profile = profileBlob;
+    return YES;
+}
+-(BOOL) operationNamesWithError: (NSError**) error{
+    uint64_t opStringOffset = [self defaultOpStringDataWithError:error];
+    if(opStringOffset == 0){
+        return NO;
+    }
+    //iterate through __DATA_CONST,__const looking for the pointer to the string offset
+    uint64_t size = self.dataConstConst.size;
+    uint64_t base = self.dataConstConst.offset;
+    uint64_t total;
+    if(os_add_overflow(size, base, &total)){
+        if(error){*error =kernelCacheError(@"overflow when reading __DATA_CONST,__const");}
+        return NO;
+    }
+    if(total > self.data.length){
+        if(error){*error =kernelCacheError(@"OOB when reading __DATA_CONST,__const");}
+        return NO;
+    }
+    uint64_t arrayOffset = 0;
+    BOOL arrayFound = NO;
+    const uint8_t *bytes = (const uint8_t *)[self.data bytes];
+    for(uint64_t i = 0; i + 8 <= size ; i +=8){
+        uint64_t currentPtr;
+        memcpy(&currentPtr, bytes + base + i, sizeof(currentPtr));
+        if((currentPtr & 0x3FFFFFFF) == opStringOffset){
+            arrayOffset = base + i;
+            arrayFound = YES;
+            break;
+        }
+    }
+    if(!arrayFound){
+        if(error){*error = kernelCacheError(@"operation string array not found");}
+        return NO;
+    }
+    NSMutableArray<NSString *> * operationStrings = [[NSMutableArray alloc]init];
+    uint64_t maxOffset;
+    if(os_add_overflow(self.textCString.offset, self.textCString.size, &maxOffset)){
+        if(error){*error = kernelCacheError(@"overflow when reading __TEXT,__cstring");}
+        return NO;
+    }
+    for(uint64_t i = 0; arrayOffset + i + 8  <= base + size ; i +=8){
+        uint64_t currentPtr;
+        memcpy(&currentPtr, bytes + arrayOffset + i, sizeof(currentPtr));
+        uint64_t cstringOffset = currentPtr & 0x3FFFFFFF;
+        if(cstringOffset < self.textCString.offset || cstringOffset >= maxOffset){
+            break;
+        }
+        const uint8_t *stringEnd = memchr(bytes + cstringOffset, 0x00, maxOffset - cstringOffset);
+        if(!stringEnd){
+            if(error){*error = kernelCacheError(@"String null terminator not found");}
+            return NO;
+        }
+        uint64_t stringLen = stringEnd - (bytes + cstringOffset);
+        
+        NSString * operationString = [[NSString alloc] initWithBytes:bytes+cstringOffset length:stringLen encoding:NSUTF8StringEncoding];
+        if(!operationString){
+            if(error){*error = kernelCacheError(@"failed to get operation NSString");}
+            return NO;
+        }
+        [operationStrings addObject:operationString];
+    }
+    if(![operationStrings[0] isEqualToString:@"default"]){
+        if(error){*error = kernelCacheError(@"retrieved operation string appear to be corrupted");}
+        return NO;
+    }
+    self.operationNames = operationStrings;
+    return YES;
+}
+-(uint64_t) defaultOpStringDataWithError: (NSError **)error{
+    
+    uint64_t startOffset = self.textCString.offset;
+    uint64_t size = self.textCString.size;
+    NSData * stringData = [NSData dataWithBytes:"\0default" length:9];
+    NSRange opStringRange = [self.data rangeOfData:stringData options:0 range:NSMakeRange(startOffset, size)];
+    
+    if(opStringRange.location == NSNotFound){
+        if(error){*error = kernelCacheError(@"Failed to find start of operation name strings list");}
+        return 0;
+    }
+    
+    return opStringRange.location + 1;
 }
 @end
